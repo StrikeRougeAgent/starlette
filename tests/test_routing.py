@@ -190,7 +190,7 @@ def test_router(client: TestClient) -> None:
     response = client.post("/")
     assert response.status_code == 405
     assert response.text == "Method Not Allowed"
-    assert set(response.headers["allow"].split(", ")) == {"HEAD", "GET"}
+    assert response.headers["allow"] == "GET, HEAD"
 
     response = client.get("/foo")
     assert response.status_code == 404
@@ -1264,3 +1264,17 @@ def test_host_routing_is_case_insensitive(test_client_factory: TestClientFactory
     response = test_client_factory(router).get("/", headers={"host": "Sub.example.ORG"})
     assert response.status_code == 200
     assert response.text == "sub"
+
+
+def test_405_allow_header_is_sorted(test_client_factory: TestClientFactory) -> None:
+    def endpoint(request: Request) -> Response:  # pragma: no cover
+        return Response()
+
+    app = Starlette(routes=[Route("/multi", endpoint, methods=["GET", "POST", "PUT", "DELETE", "PATCH"])])
+    with test_client_factory(app) as client:
+        response = client.request("OPTIONS", "/multi")
+
+    assert response.status_code == 405
+    # Route.methods is a set, so the header order must be imposed explicitly.
+    # Otherwise it varies with the process hash seed.
+    assert response.headers["allow"] == "DELETE, GET, HEAD, PATCH, POST, PUT"
